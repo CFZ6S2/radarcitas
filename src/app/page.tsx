@@ -57,8 +57,8 @@ export default function LandingPage() {
           >
             Abrir Radar Ahora
           </Link>
-          <Link 
-            href="/register"
+          <Link
+            href="/anunciate"
             className="w-full sm:w-auto px-8 py-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-white font-bold rounded-2xl transition-all text-center"
           >
             Anunciar mi perfil
