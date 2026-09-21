@@ -8,6 +8,13 @@ import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
 
+interface Schedule {
+  enabled: boolean;
+  days: number[]; // 0=Dom, 1=Lun ... 6=Sáb
+  startHour: number;
+  endHour: number;
+}
+
 interface ProfileData {
   docId: string;
   name: string;
@@ -16,7 +23,11 @@ interface ProfileData {
   description: string;
   active: boolean;
   photos: string[];
+  schedule?: Schedule;
 }
+
+const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const DEFAULT_SCHEDULE: Schedule = { enabled: false, days: [1, 2, 3, 4, 5], startHour: 10, endHour: 22 };
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
@@ -31,6 +42,8 @@ export default function DashboardPage() {
   const [message, setMessage] = useState('');
   const [newPhotos, setNewPhotos] = useState<File[]>([]);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const [schedule, setSchedule] = useState<Schedule>(DEFAULT_SCHEDULE);
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -53,9 +66,11 @@ export default function DashboardPage() {
           description: data.description,
           active: data.active !== false,
           photos: data.photos || [],
+          schedule: data.schedule || undefined,
         };
         setProfile(p);
         setForm({ name: p.name, whatsapp: p.whatsapp, description: p.description });
+        if (data.schedule) setSchedule(data.schedule);
       }
       setLoadingProfile(false);
     }
@@ -131,6 +146,28 @@ export default function DashboardPage() {
       setMessage('Foto eliminada.');
     } catch {
       setMessage('Error al eliminar foto.');
+    }
+  };
+
+  const toggleDay = (day: number) => {
+    setSchedule(s => ({
+      ...s,
+      days: s.days.includes(day) ? s.days.filter(d => d !== day) : [...s.days, day].sort(),
+    }));
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!profile) return;
+    setSavingSchedule(true);
+    setMessage('');
+    try {
+      await updateDoc(doc(db, 'profiles', profile.docId), { schedule });
+      setProfile({ ...profile, schedule });
+      setMessage(schedule.enabled ? 'Horario activado.' : 'Horario desactivado.');
+    } catch {
+      setMessage('Error al guardar horario.');
+    } finally {
+      setSavingSchedule(false);
     }
   };
 
@@ -225,6 +262,97 @@ export default function DashboardPage() {
                     profile.active ? 'translate-x-6' : ''
                   }`}
                 />
+              </button>
+            </div>
+
+            {/* Horario programado */}
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-lg">Horario programado</h3>
+                  <p className="text-sm text-zinc-400">
+                    {schedule.enabled
+                      ? `Visible ${schedule.startHour}:00 - ${schedule.endHour}:00`
+                      : 'Tu perfil usa solo el botón manual de arriba.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSchedule(s => ({ ...s, enabled: !s.enabled }))}
+                  className={`relative w-14 h-8 rounded-full transition-colors ${
+                    schedule.enabled ? 'bg-blue-600' : 'bg-zinc-700'
+                  }`}
+                >
+                  <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform ${
+                    schedule.enabled ? 'translate-x-6' : ''
+                  }`} />
+                </button>
+              </div>
+
+              {schedule.enabled && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Días activos</label>
+                    <div className="flex gap-1.5">
+                      {DAY_LABELS.map((label, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => toggleDay(i)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
+                            schedule.days.includes(i)
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-zinc-400 mb-1">Desde</label>
+                      <select
+                        value={schedule.startHour}
+                        onChange={e => setSchedule(s => ({ ...s, startHour: Number(e.target.value) }))}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {Array.from({ length: 24 }, (_, h) => (
+                          <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-zinc-400 mb-1">Hasta</label>
+                      <select
+                        value={schedule.endHour}
+                        onChange={e => setSchedule(s => ({ ...s, endHour: Number(e.target.value) }))}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {Array.from({ length: 24 }, (_, h) => (
+                          <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-zinc-500">
+                    {schedule.startHour < schedule.endHour
+                      ? `Visible de ${schedule.startHour}:00 a ${schedule.endHour}:00 los días seleccionados.`
+                      : schedule.startHour > schedule.endHour
+                      ? `Visible de ${schedule.startHour}:00 a ${schedule.endHour}:00 (turno nocturno, cruza medianoche).`
+                      : 'La hora de inicio y fin no pueden ser iguales.'}
+                  </p>
+                </>
+              )}
+
+              <button
+                onClick={handleSaveSchedule}
+                disabled={savingSchedule || (schedule.enabled && schedule.startHour === schedule.endHour)}
+                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition"
+              >
+                {savingSchedule ? 'Guardando...' : 'Guardar horario'}
               </button>
             </div>
 

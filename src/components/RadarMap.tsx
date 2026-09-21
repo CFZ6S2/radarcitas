@@ -10,6 +10,13 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
 
+interface Schedule {
+  enabled: boolean;
+  days: number[];
+  startHour: number;
+  endHour: number;
+}
+
 interface Profile {
   id: string;
   uid?: string;
@@ -24,6 +31,16 @@ interface Profile {
   services?: string[];
   photos?: string[];
   active?: boolean;
+  schedule?: Schedule;
+}
+
+function isWithinSchedule(s: Schedule): boolean {
+  const now = new Date();
+  if (!s.days.includes(now.getDay())) return false;
+  const h = now.getHours();
+  if (s.startHour < s.endHour) return h >= s.startHour && h < s.endHour;
+  // overnight: e.g. 22-06
+  return h >= s.startHour || h < s.endHour;
 }
 
 const DEFAULT_CENTER: [number, number] = [40.4168, -3.7038];
@@ -125,13 +142,18 @@ export default function RadarMap() {
               rates: data.rates,
               services: data.services || [],
               photos: data.photos || [],
-              active: data.active !== false // Por defecto true si no existe
+              active: data.active !== false,
+              schedule: data.schedule || undefined
             });
           }
         }
         
         // Evitamos duplicados en caso de solapamiento de geohashes y filtramos inactivos
-        const uniqueProfiles = Array.from(new Map(loadedProfiles.map(p => [p.id, p])).values()).filter(p => p.active);
+        const uniqueProfiles = Array.from(new Map(loadedProfiles.map(p => [p.id, p])).values()).filter(p => {
+          if (!p.active) return false;
+          if (p.schedule?.enabled) return isWithinSchedule(p.schedule);
+          return true;
+        });
         setFetchedProfiles(uniqueProfiles);
       } catch (error) {
         console.error("Error al cargar perfiles de Firebase:", error);
