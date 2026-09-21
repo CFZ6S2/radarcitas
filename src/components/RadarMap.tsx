@@ -50,6 +50,8 @@ function MapController({ center }: { center: [number, number] }) {
   return null;
 }
 
+const ALL_SERVICES = ['Masaje', 'Trato de Novios', 'Garganta Profunda', 'Beso con Lengua', 'Lluvia Dorada', 'Juguetes', 'Salidas'];
+
 export default function RadarMap() {
   const [fetchedProfiles, setFetchedProfiles] = useState<Profile[]>([]);
   const [userLocation, setUserLocation] = useState<[number, number]>(DEFAULT_CENTER);
@@ -57,6 +59,11 @@ export default function RadarMap() {
   const [isMounted, setIsMounted] = useState(false);
   const [locating, setLocating] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [ageMin, setAgeMin] = useState<number>(18);
+  const [ageMax, setAgeMax] = useState<number>(99);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [sortByDistance, setSortByDistance] = useState(true);
 
   // 1. Obtener ubicación
   useEffect(() => {
@@ -134,16 +141,20 @@ export default function RadarMap() {
     fetchProfilesInRadius();
   }, [userLocation, radiusKm, isMounted]);
 
-  // 3. Filtrado final preciso en el cliente usando useMemo
+  const toggleService = (s: string) => {
+    setSelectedServices(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  };
+
   const filteredProfiles = useMemo(() => {
     return fetchedProfiles.map(profile => {
       const distInMeters = distanceBetween(userLocation, [profile.latitude, profile.longitude]);
-      return {
-        ...profile,
-        distance: Math.round(distInMeters * 10) / 10
-      };
-    }).filter(p => (p.distance ?? 0) <= radiusKm);
-  }, [fetchedProfiles, userLocation, radiusKm]);
+      return { ...profile, distance: Math.round(distInMeters * 10) / 10 };
+    })
+    .filter(p => (p.distance ?? 0) <= radiusKm)
+    .filter(p => p.age >= ageMin && p.age <= ageMax)
+    .filter(p => selectedServices.length === 0 || selectedServices.some(s => p.services?.includes(s)))
+    .sort((a, b) => sortByDistance ? (a.distance ?? 0) - (b.distance ?? 0) : 0);
+  }, [fetchedProfiles, userLocation, radiusKm, ageMin, ageMax, selectedServices, sortByDistance]);
 
   if (!isMounted) return <div className="h-screen w-full flex items-center justify-center bg-zinc-900 text-white">Cargando radar...</div>;
 
@@ -169,7 +180,62 @@ export default function RadarMap() {
           </div>
         </div>
         {locating && <span className="text-xs text-blue-400 animate-pulse ml-2">Ubicando...</span>}
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+            showFilters || selectedServices.length > 0 || ageMin > 18 || ageMax < 99
+              ? 'bg-rose-600 text-white'
+              : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+          }`}
+        >
+          Filtros{(selectedServices.length > 0 || ageMin > 18 || ageMax < 99) ? ` (${selectedServices.length + (ageMin > 18 || ageMax < 99 ? 1 : 0)})` : ''}
+        </button>
+        <span className="text-xs text-zinc-500">{filteredProfiles.length} perfil{filteredProfiles.length !== 1 ? 'es' : ''}</span>
       </div>
+
+      {showFilters && (
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-[1000] bg-zinc-900/95 backdrop-blur-md text-white px-5 py-4 rounded-2xl shadow-xl border border-zinc-700 w-[90%] max-w-md space-y-4">
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">Edad: {ageMin} - {ageMax}</label>
+            <div className="flex items-center gap-3">
+              <input type="range" min={18} max={99} value={ageMin} onChange={e => setAgeMin(Math.min(Number(e.target.value), ageMax))} className="flex-1 accent-rose-500" />
+              <input type="range" min={18} max={99} value={ageMax} onChange={e => setAgeMax(Math.max(Number(e.target.value), ageMin))} className="flex-1 accent-rose-500" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">Servicios</label>
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_SERVICES.map(s => (
+                <button
+                  key={s}
+                  onClick={() => toggleService(s)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                    selectedServices.includes(s)
+                      ? 'bg-rose-600 border-rose-500 text-white'
+                      : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 text-xs text-zinc-300">
+              <input type="checkbox" checked={sortByDistance} onChange={e => setSortByDistance(e.target.checked)} className="accent-rose-500" />
+              Ordenar por cercanía
+            </label>
+            <button
+              onClick={() => { setAgeMin(18); setAgeMax(99); setSelectedServices([]); setSortByDistance(true); }}
+              className="text-xs text-rose-400 hover:text-rose-300 transition"
+            >
+              Limpiar filtros
+            </button>
+          </div>
+        </div>
+      )}
 
       <MapContainer 
         center={userLocation} 
