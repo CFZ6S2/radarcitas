@@ -59,6 +59,8 @@ export default function RegisterProfilePage() {
   const [photos, setPhotos] = useState<File[]>([]);
   const [rates, setRates] = useState('');
   const [services, setServices] = useState<string[]>([]);
+  const [contactMethod, setContactMethod] = useState<'whatsapp' | 'telegram' | 'both'>('whatsapp');
+  const [telegram, setTelegram] = useState('');
   
   const AVAILABLE_SERVICES = ['Masaje', 'Trato de Novios', 'Garganta Profunda', 'Beso con Lengua', 'Lluvia Dorada', 'Juguetes', 'Salidas'];
 
@@ -92,6 +94,7 @@ export default function RegisterProfilePage() {
       const safeDescription = form.description.substring(0, 300).replace(/[<>]/g, '');
       const safeWhatsApp = form.whatsapp.replace(/[^0-9+]/g, '').substring(0, 15);
       const safeRates = rates.substring(0, 200).replace(/[<>]/g, '');
+      const safeTelegram = telegram.replace(/[^a-zA-Z0-9_]/g, '').substring(0, 32);
 
       // Ofuscar la ubicación
       const radiusInMeters = 200;
@@ -125,6 +128,8 @@ export default function RegisterProfilePage() {
         description: safeDescription,
         rates: safeRates,
         services: services,
+        contactMethod,
+        telegram: safeTelegram,
         photos: photoUrls,
         location: {
           latitude: obfuscatedLat,
@@ -197,30 +202,65 @@ export default function RegisterProfilePage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-zinc-300 mb-1">Edad</label>
-                  <input 
-                    type="number" 
-                    required min={18} max={99}
-                    value={form.age} 
-                    onChange={e => setForm({...form, age: e.target.value})}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500 transition"
-                    placeholder="Ej. 24"
-                  />
+              <div>
+                <label className="block text-sm font-semibold text-zinc-300 mb-1">Edad</label>
+                <input
+                  type="number"
+                  required min={18} max={99}
+                  value={form.age}
+                  onChange={e => setForm({...form, age: e.target.value})}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500 transition"
+                  placeholder="Ej. 24"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-zinc-300 mb-2">Método de contacto</label>
+                <div className="flex gap-2">
+                  {([['whatsapp', 'WhatsApp'], ['telegram', 'Telegram'], ['both', 'Ambos']] as const).map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setContactMethod(val)}
+                      className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition ${
+                        contactMethod === val
+                          ? 'bg-rose-600 border-rose-500 text-white'
+                          : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
+              </div>
+
+              {(contactMethod === 'whatsapp' || contactMethod === 'both') && (
                 <div>
                   <label className="block text-sm font-semibold text-zinc-300 mb-1">WhatsApp</label>
-                  <input 
-                    type="tel" 
+                  <input
+                    type="tel"
                     required
-                    value={form.whatsapp} 
+                    value={form.whatsapp}
                     onChange={e => setForm({...form, whatsapp: e.target.value})}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500 transition"
                     placeholder="+34 600..."
                   />
                 </div>
-              </div>
+              )}
+
+              {(contactMethod === 'telegram' || contactMethod === 'both') && (
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-300 mb-1">Telegram (usuario sin @)</label>
+                  <input
+                    type="text"
+                    required
+                    value={telegram}
+                    onChange={e => setTelegram(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500 transition"
+                    placeholder="tu_usuario"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-semibold text-zinc-300 mb-1">¿Qué ofreces? (Descripción general)</label>

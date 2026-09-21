@@ -20,6 +20,8 @@ interface ProfileData {
   name: string;
   age: number;
   whatsapp: string;
+  telegram?: string;
+  contactMethod?: 'whatsapp' | 'telegram' | 'both';
   description: string;
   active: boolean;
   photos: string[];
@@ -34,7 +36,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
-  const [form, setForm] = useState({ name: '', whatsapp: '', description: '' });
+  const [form, setForm] = useState({ name: '', whatsapp: '', description: '', telegram: '', contactMethod: 'whatsapp' as 'whatsapp' | 'telegram' | 'both' });
   const [saving, setSaving] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -63,13 +65,15 @@ export default function DashboardPage() {
           name: data.name,
           age: data.age,
           whatsapp: data.whatsapp,
+          telegram: data.telegram || '',
+          contactMethod: data.contactMethod || 'whatsapp',
           description: data.description,
           active: data.active !== false,
           photos: data.photos || [],
           schedule: data.schedule || undefined,
         };
         setProfile(p);
-        setForm({ name: p.name, whatsapp: p.whatsapp, description: p.description });
+        setForm({ name: p.name, whatsapp: p.whatsapp, description: p.description, telegram: p.telegram || '', contactMethod: p.contactMethod || 'whatsapp' });
         if (data.schedule) setSchedule(data.schedule);
       }
       setLoadingProfile(false);
@@ -97,8 +101,10 @@ export default function DashboardPage() {
         name: form.name.trim().slice(0, 50),
         whatsapp: form.whatsapp.trim().slice(0, 20),
         description: form.description.trim().slice(0, 500),
+        telegram: form.telegram.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 32),
+        contactMethod: form.contactMethod,
       });
-      setProfile({ ...profile, name: form.name.trim(), whatsapp: form.whatsapp.trim(), description: form.description.trim() });
+      setProfile({ ...profile, name: form.name.trim(), whatsapp: form.whatsapp.trim(), description: form.description.trim(), telegram: form.telegram.trim(), contactMethod: form.contactMethod });
       setMessage('Perfil actualizado correctamente.');
     } catch {
       setMessage('Error al guardar. Inténtalo de nuevo.');
@@ -372,15 +378,51 @@ export default function DashboardPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-1">WhatsApp</label>
-                <input
-                  type="tel"
-                  value={form.whatsapp}
-                  onChange={e => setForm({ ...form, whatsapp: e.target.value })}
-                  maxLength={20}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500 transition"
-                />
+                <label className="block text-sm font-semibold text-zinc-300 mb-2">Método de contacto</label>
+                <div className="flex gap-2">
+                  {([['whatsapp', 'WhatsApp'], ['telegram', 'Telegram'], ['both', 'Ambos']] as const).map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setForm({ ...form, contactMethod: val })}
+                      className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition ${
+                        form.contactMethod === val
+                          ? 'bg-rose-600 border-rose-500 text-white'
+                          : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {(form.contactMethod === 'whatsapp' || form.contactMethod === 'both') && (
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-300 mb-1">WhatsApp</label>
+                  <input
+                    type="tel"
+                    value={form.whatsapp}
+                    onChange={e => setForm({ ...form, whatsapp: e.target.value })}
+                    maxLength={20}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500 transition"
+                  />
+                </div>
+              )}
+
+              {(form.contactMethod === 'telegram' || form.contactMethod === 'both') && (
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-300 mb-1">Telegram (usuario sin @)</label>
+                  <input
+                    type="text"
+                    value={form.telegram}
+                    onChange={e => setForm({ ...form, telegram: e.target.value })}
+                    maxLength={32}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500 transition"
+                    placeholder="tu_usuario"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-semibold text-zinc-300 mb-1">Descripción</label>
