@@ -53,9 +53,13 @@ export default function LoginPage() {
     if (!phone.trim()) return;
     setSending(true);
     try {
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
+      if (window.recaptchaVerifier) {
+        window.recaptchaVerifier.clear();
+        window.recaptchaVerifier = undefined;
       }
+      const container = document.getElementById('recaptcha-container');
+      if (container) container.innerHTML = '';
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
       const result = await signInWithPhoneNumber(auth, phone.trim(), window.recaptchaVerifier);
       setConfirmation(result);
     } catch (err: unknown) {
