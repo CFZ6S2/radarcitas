@@ -23,14 +23,22 @@ service cloud.firestore {
                     && request.resource.data.active is bool;
 
       allow update: if request.auth != null
-                    && resource.data.uid == request.auth.uid
+                    && (resource.data.uid == request.auth.uid || request.auth.token.email in ['cesar.herrera.rojo@gmail.com'])
                     && request.resource.data.uid == resource.data.uid
                     && request.resource.data.age == resource.data.age
                     && request.resource.data.location == resource.data.location
                     && request.resource.data.geohash == resource.data.geohash;
 
       allow delete: if request.auth != null
-                    && resource.data.uid == request.auth.uid;
+                    && (resource.data.uid == request.auth.uid || request.auth.token.email in ['cesar.herrera.rojo@gmail.com']);
+    }
+    match /favorites/{favoriteId} {
+      allow read, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+    }
+    match /reports/{reportId} {
+      allow create: if true;
+      allow read, update, delete: if request.auth != null && request.auth.token.email in ['cesar.herrera.rojo@gmail.com'];
     }
   }
 }
