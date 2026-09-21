@@ -9,6 +9,15 @@ import Link from 'next/link';
 
 const ADMIN_EMAILS = ['cesar.herrera.rojo@gmail.com'];
 
+interface Report {
+  id: string;
+  profileId: string;
+  profileName: string;
+  reason: string;
+  status: 'pending' | 'reviewed' | 'dismissed';
+  createdAt?: { seconds: number };
+}
+
 interface Profile {
   id: string;
   uid: string;
@@ -36,6 +45,8 @@ export default function AdminPage() {
   const [message, setMessage] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [tab, setTab] = useState<'profiles' | 'reports'>('profiles');
 
   const isAdmin = user && ADMIN_EMAILS.includes(user.email || '');
 
@@ -67,6 +78,14 @@ export default function AdminPage() {
       });
       list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setProfiles(list);
+
+      const rSnap = await getDocs(collection(db, 'reports'));
+      const rList: Report[] = rSnap.docs.map(d => {
+        const data = d.data();
+        return { id: d.id, profileId: data.profileId, profileName: data.profileName, reason: data.reason, status: data.status || 'pending', createdAt: data.createdAt };
+      });
+      rList.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setReports(rList);
       setLoading(false);
     }
     fetchAll();
@@ -95,6 +114,20 @@ export default function AdminPage() {
     setConfirmDeleteId(null);
     setMessage(`${p.name} eliminado permanentemente.`);
   };
+
+  const updateReportStatus = async (r: Report, status: 'reviewed' | 'dismissed') => {
+    await updateDoc(doc(db, 'reports', r.id), { status });
+    setReports(prev => prev.map(x => x.id === r.id ? { ...x, status } : x));
+    setMessage(`Reporte ${status === 'reviewed' ? 'marcado como revisado' : 'descartado'}.`);
+  };
+
+  const deleteReport = async (r: Report) => {
+    await deleteDoc(doc(db, 'reports', r.id));
+    setReports(prev => prev.filter(x => x.id !== r.id));
+    setMessage('Reporte eliminado.');
+  };
+
+  const pendingReports = reports.filter(r => r.status === 'pending').length;
 
   const filtered = profiles.filter(p => {
     if (filter === 'active' && !p.active) return false;
@@ -151,6 +184,26 @@ export default function AdminPage() {
           ))}
         </div>
 
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setTab('profiles')}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${tab === 'profiles' ? 'bg-rose-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+          >
+            Perfiles
+          </button>
+          <button
+            onClick={() => setTab('reports')}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition relative ${tab === 'reports' ? 'bg-rose-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+          >
+            Reportes
+            {pendingReports > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">{pendingReports}</span>
+            )}
+          </button>
+        </div>
+
+        {tab === 'profiles' && (<>
         {/* Search + Filter */}
         <div className="flex gap-3 mb-6">
           <input
@@ -275,6 +328,52 @@ export default function AdminPage() {
             </div>
           ))}
         </div>
+        </>)}
+
+        {tab === 'reports' && (
+          <div className="space-y-3">
+            {reports.length === 0 ? (
+              <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-8 text-center text-zinc-500">
+                No hay reportes.
+              </div>
+            ) : (
+              reports.map(r => (
+                <div key={r.id} className={`bg-zinc-900/80 border rounded-2xl p-4 space-y-3 ${r.status === 'pending' ? 'border-red-900/50' : 'border-zinc-800'}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-bold">{r.profileName}</span>
+                      <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                        r.status === 'pending' ? 'bg-red-950 text-red-400' :
+                        r.status === 'reviewed' ? 'bg-emerald-950 text-emerald-400' :
+                        'bg-zinc-800 text-zinc-500'
+                      }`}>
+                        {r.status === 'pending' ? 'Pendiente' : r.status === 'reviewed' ? 'Revisado' : 'Descartado'}
+                      </span>
+                    </div>
+                    {r.createdAt && <span className="text-xs text-zinc-500">{new Date(r.createdAt.seconds * 1000).toLocaleDateString('es-ES')}</span>}
+                  </div>
+                  <p className="text-sm text-zinc-300 bg-zinc-950 p-3 rounded-xl border border-zinc-800/50">{r.reason}</p>
+                  <div className="text-xs text-zinc-500">Profile ID: {r.profileId}</div>
+                  <div className="flex gap-2">
+                    {r.status === 'pending' && (
+                      <>
+                        <button onClick={() => updateReportStatus(r, 'reviewed')} className="flex-1 bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 hover:bg-emerald-950 font-bold py-2 rounded-xl text-sm transition">
+                          Marcar revisado
+                        </button>
+                        <button onClick={() => updateReportStatus(r, 'dismissed')} className="flex-1 bg-zinc-800 text-zinc-400 hover:bg-zinc-700 font-bold py-2 rounded-xl text-sm transition">
+                          Descartar
+                        </button>
+                      </>
+                    )}
+                    <button onClick={() => deleteReport(r)} className="flex-1 bg-red-950/50 text-red-400 border border-red-900/50 hover:bg-red-950 font-bold py-2 rounded-xl text-sm transition">
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import { collection, getDocs, query, orderBy, startAt, endAt } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, orderBy, startAt, endAt } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { distanceBetween, geohashQueryBounds } from 'geofire-common';
 import L from 'leaflet';
@@ -79,6 +79,10 @@ export default function RadarMap() {
   const [locating, setLocating] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportSent, setReportSent] = useState(false);
+  const [sendingReport, setSendingReport] = useState(false);
   const [ageMin, setAgeMin] = useState<number>(18);
   const [ageMax, setAgeMax] = useState<number>(99);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
@@ -169,6 +173,23 @@ export default function RadarMap() {
 
   const toggleService = (s: string) => {
     setSelectedServices(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  };
+
+  const handleReport = async () => {
+    if (!selectedProfile || !reportReason.trim()) return;
+    setSendingReport(true);
+    try {
+      await addDoc(collection(db, 'reports'), {
+        profileId: selectedProfile.id,
+        profileName: selectedProfile.name,
+        reason: reportReason.trim().slice(0, 500),
+        createdAt: new Date(),
+        status: 'pending',
+      });
+      setReportSent(true);
+      setReportReason('');
+    } catch { /* silent */ }
+    finally { setSendingReport(false); }
   };
 
   const filteredProfiles = useMemo(() => {
@@ -310,7 +331,7 @@ export default function RadarMap() {
                 </span>
               </div>
               <button 
-                onClick={() => setSelectedProfile(null)}
+                onClick={() => { setSelectedProfile(null); setShowReport(false); setReportSent(false); setReportReason(''); }}
                 className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full text-zinc-400 transition"
               >
                 ✕
@@ -350,6 +371,62 @@ export default function RadarMap() {
                 </div>
               )}
             </div>
+
+            {/* Report */}
+            {!showReport && !reportSent && (
+              <button
+                onClick={() => setShowReport(true)}
+                className="text-xs text-zinc-500 hover:text-red-400 transition mb-3"
+              >
+                Reportar este perfil
+              </button>
+            )}
+            {showReport && !reportSent && (
+              <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 mb-3 space-y-3">
+                <p className="text-sm font-semibold text-zinc-300">Motivo del reporte</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {['Fotos falsas', 'Spam', 'Menor de edad', 'Contenido ofensivo', 'Estafa'].map(r => (
+                    <button
+                      key={r}
+                      onClick={() => setReportReason(r)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
+                        reportReason === r ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-400'
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  rows={2}
+                  value={reportReason}
+                  onChange={e => setReportReason(e.target.value)}
+                  placeholder="Describe el problema (opcional si ya elegiste arriba)..."
+                  maxLength={500}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 transition resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleReport}
+                    disabled={sendingReport || !reportReason.trim()}
+                    className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-sm transition"
+                  >
+                    {sendingReport ? 'Enviando...' : 'Enviar reporte'}
+                  </button>
+                  <button
+                    onClick={() => { setShowReport(false); setReportReason(''); }}
+                    className="flex-1 bg-zinc-800 text-zinc-300 font-bold py-2.5 rounded-xl text-sm transition hover:bg-zinc-700"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+            {reportSent && (
+              <div className="bg-emerald-950/40 border border-emerald-900 text-emerald-400 text-sm rounded-xl px-4 py-3 mb-3 text-center">
+                Reporte enviado. Gracias por ayudarnos a mantener la plataforma segura.
+              </div>
+            )}
 
             <div className={`flex gap-3 sticky bottom-0 ${selectedProfile.contactMethod === 'both' ? '' : ''}`}>
               {(selectedProfile.contactMethod === 'whatsapp' || selectedProfile.contactMethod === 'both' || !selectedProfile.contactMethod) && selectedProfile.whatsapp && (
