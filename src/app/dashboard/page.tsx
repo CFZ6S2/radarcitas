@@ -226,7 +226,17 @@ export default function DashboardPage() {
         </div>
 
         <h1 className="text-3xl font-extrabold tracking-tight mb-2">Mi Panel</h1>
-        <p className="text-zinc-400 mb-8">Gestiona tu perfil y visibilidad en el radar.</p>
+        <p className="text-zinc-400 mb-4">Gestiona tu perfil y visibilidad en el radar.</p>
+
+        {['cesar.herrera.rojo@gmail.com'].includes(user.email || '') && (
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-2 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white text-sm font-semibold px-4 py-2 rounded-xl transition mb-6"
+          >
+            <span className="w-2 h-2 bg-rose-500 rounded-full"></span>
+            Panel de Administración
+          </Link>
+        )}
 
         {message && (
           <div className="bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm rounded-xl px-4 py-3 mb-6">
