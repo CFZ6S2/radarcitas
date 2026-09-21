@@ -15,6 +15,7 @@ interface ProfileData {
   whatsapp: string;
   description: string;
   active: boolean;
+  photos: string[];
 }
 
 export default function DashboardPage() {
@@ -28,6 +29,8 @@ export default function DashboardPage() {
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [message, setMessage] = useState('');
+  const [newPhotos, setNewPhotos] = useState<File[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -49,6 +52,7 @@ export default function DashboardPage() {
           whatsapp: data.whatsapp,
           description: data.description,
           active: data.active !== false,
+          photos: data.photos || [],
         };
         setProfile(p);
         setForm({ name: p.name, whatsapp: p.whatsapp, description: p.description });
@@ -85,6 +89,48 @@ export default function DashboardPage() {
       setMessage('Error al guardar. Inténtalo de nuevo.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUploadPhotos = async () => {
+    if (!profile || newPhotos.length === 0) return;
+    if ((profile.photos.length + newPhotos.length) > 3) {
+      setMessage('Máximo 3 fotos en total. Elimina alguna primero.');
+      return;
+    }
+    setUploadingPhotos(true);
+    setMessage('');
+    try {
+      const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const { storage } = await import('@/lib/firebase');
+      const urls: string[] = [];
+      for (const file of newPhotos) {
+        const fileRef = ref(storage, `profiles/${user.uid}/${Date.now()}_${file.name}`);
+        const snap = await uploadBytes(fileRef, file);
+        urls.push(await getDownloadURL(snap.ref));
+      }
+      const updatedPhotos = [...profile.photos, ...urls];
+      await updateDoc(doc(db, 'profiles', profile.docId), { photos: updatedPhotos });
+      setProfile({ ...profile, photos: updatedPhotos });
+      setNewPhotos([]);
+      setMessage('Fotos subidas correctamente.');
+    } catch {
+      setMessage('Error al subir fotos.');
+    } finally {
+      setUploadingPhotos(false);
+    }
+  };
+
+  const handleRemovePhoto = async (url: string) => {
+    if (!profile) return;
+    setMessage('');
+    try {
+      const updatedPhotos = profile.photos.filter(p => p !== url);
+      await updateDoc(doc(db, 'profiles', profile.docId), { photos: updatedPhotos });
+      setProfile({ ...profile, photos: updatedPhotos });
+      setMessage('Foto eliminada.');
+    } catch {
+      setMessage('Error al eliminar foto.');
     }
   };
 
@@ -230,6 +276,54 @@ export default function DashboardPage() {
               >
                 {saving ? 'Guardando...' : 'Guardar cambios'}
               </button>
+            </div>
+
+            {/* Fotos */}
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-4">
+              <h3 className="font-bold text-lg">Mis fotos</h3>
+
+              {profile.photos.length > 0 ? (
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {profile.photos.map((url, i) => (
+                    <div key={i} className="relative shrink-0">
+                      <img src={url} alt={`Foto ${i + 1}`} className="h-32 w-28 object-cover rounded-xl border border-zinc-800" />
+                      <button
+                        onClick={() => handleRemovePhoto(url)}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 hover:bg-red-500 text-white rounded-full text-xs flex items-center justify-center transition"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-zinc-500">No tienes fotos publicadas.</p>
+              )}
+
+              {profile.photos.length < 3 && (
+                <div className="space-y-3">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={e => {
+                      if (e.target.files) setNewPhotos(Array.from(e.target.files).slice(0, 3 - profile.photos.length));
+                    }}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-rose-600/10 file:text-rose-500 hover:file:bg-rose-600/20 transition"
+                  />
+                  {newPhotos.length > 0 && (
+                    <button
+                      onClick={handleUploadPhotos}
+                      disabled={uploadingPhotos}
+                      className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition"
+                    >
+                      {uploadingPhotos ? 'Subiendo...' : `Subir ${newPhotos.length} foto(s)`}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <p className="text-xs text-zinc-500">{profile.photos.length}/3 fotos</p>
             </div>
 
             {/* Zona peligrosa */}
