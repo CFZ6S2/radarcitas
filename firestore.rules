@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /profiles/{profile} {
+      allow read: if true;
+
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.keys().hasAll(['uid', 'name', 'age', 'whatsapp', 'location', 'geohash', 'active'])
+                    && request.resource.data.age is number
+                    && request.resource.data.age >= 18
+                    && request.resource.data.age <= 99
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 50
+                    && request.resource.data.whatsapp is string
+                    && request.resource.data.whatsapp.size() > 0
+                    && request.resource.data.whatsapp.size() <= 20
+                    && request.resource.data.description is string
+                    && request.resource.data.description.size() <= 500
+                    && request.resource.data.geohash is string
+                    && request.resource.data.active is bool;
+
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == resource.data.uid
+                    && request.resource.data.age == resource.data.age
+                    && request.resource.data.location == resource.data.location
+                    && request.resource.data.geohash == resource.data.geohash;
+
+      allow delete: if request.auth != null
+                    && resource.data.uid == request.auth.uid;
+    }
+  }
+}
