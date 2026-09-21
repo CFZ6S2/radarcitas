@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import { collection, getDocs, addDoc, query, orderBy, startAt, endAt } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, doc, query, orderBy, startAt, endAt, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { useAuth } from '@/lib/auth';
 import { distanceBetween, geohashQueryBounds } from 'geofire-common';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -72,6 +73,7 @@ function MapController({ center }: { center: [number, number] }) {
 const ALL_SERVICES = ['Masaje', 'Trato de Novios', 'Garganta Profunda', 'Beso con Lengua', 'Lluvia Dorada', 'Juguetes', 'Salidas'];
 
 export default function RadarMap() {
+  const { user } = useAuth();
   const [fetchedProfiles, setFetchedProfiles] = useState<Profile[]>([]);
   const [userLocation, setUserLocation] = useState<[number, number]>(DEFAULT_CENTER);
   const [radiusKm, setRadiusKm] = useState<number>(5);
@@ -83,6 +85,8 @@ export default function RadarMap() {
   const [reportReason, setReportReason] = useState('');
   const [reportSent, setReportSent] = useState(false);
   const [sendingReport, setSendingReport] = useState(false);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [favDocMap, setFavDocMap] = useState<Map<string, string>>(new Map());
   const [ageMin, setAgeMin] = useState<number>(18);
   const [ageMax, setAgeMax] = useState<number>(99);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
@@ -173,6 +177,36 @@ export default function RadarMap() {
 
   const toggleService = (s: string) => {
     setSelectedServices(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    async function loadFavs() {
+      const q = query(collection(db, 'favorites'), where('uid', '==', user!.uid));
+      const snap = await getDocs(q);
+      const ids = new Set<string>();
+      const docMap = new Map<string, string>();
+      snap.docs.forEach(d => { ids.add(d.data().profileId); docMap.set(d.data().profileId, d.id); });
+      setFavoriteIds(ids);
+      setFavDocMap(docMap);
+    }
+    loadFavs();
+  }, [user]);
+
+  const toggleFavorite = async (profileId: string) => {
+    if (!user) return;
+    if (favoriteIds.has(profileId)) {
+      const docId = favDocMap.get(profileId);
+      if (docId) {
+        await deleteDoc(doc(db, 'favorites', docId));
+        setFavoriteIds(prev => { const n = new Set(prev); n.delete(profileId); return n; });
+        setFavDocMap(prev => { const n = new Map(prev); n.delete(profileId); return n; });
+      }
+    } else {
+      const docRef = await addDoc(collection(db, 'favorites'), { uid: user.uid, profileId, createdAt: new Date() });
+      setFavoriteIds(prev => new Set(prev).add(profileId));
+      setFavDocMap(prev => new Map(prev).set(profileId, docRef.id));
+    }
   };
 
   const handleReport = async () => {
@@ -330,12 +364,26 @@ export default function RadarMap() {
                   A {selectedProfile.distance} km de ti
                 </span>
               </div>
-              <button 
-                onClick={() => { setSelectedProfile(null); setShowReport(false); setReportSent(false); setReportReason(''); }}
-                className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full text-zinc-400 transition"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                {user && (
+                  <button
+                    onClick={() => toggleFavorite(selectedProfile.id)}
+                    className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full transition"
+                  >
+                    {favoriteIds.has(selectedProfile.id) ? (
+                      <svg className="w-5 h-5 text-rose-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                    )}
+                  </button>
+                )}
+                <button
+                  onClick={() => { setSelectedProfile(null); setShowReport(false); setReportSent(false); setReportReason(''); }}
+                  className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full text-zinc-400 transition"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {selectedProfile.photos && selectedProfile.photos.length > 0 && (

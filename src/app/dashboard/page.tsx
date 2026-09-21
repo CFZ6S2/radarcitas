@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'firebase/auth';
-import { collection, query, where, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
@@ -46,6 +46,7 @@ export default function DashboardPage() {
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [schedule, setSchedule] = useState<Schedule>(DEFAULT_SCHEDULE);
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [favorites, setFavorites] = useState<{ favDocId: string; profileId: string; name: string; age: number; photos: string[]; whatsapp: string; telegram?: string; contactMethod?: string }[]>([]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -76,6 +77,18 @@ export default function DashboardPage() {
         setForm({ name: p.name, whatsapp: p.whatsapp, description: p.description, telegram: p.telegram || '', contactMethod: p.contactMethod || 'whatsapp' });
         if (data.schedule) setSchedule(data.schedule);
       }
+      // Load favorites
+      const favQ = query(collection(db, 'favorites'), where('uid', '==', user!.uid));
+      const favSnap = await getDocs(favQ);
+      const favs = [];
+      for (const favDoc of favSnap.docs) {
+        const profileDoc = await getDoc(doc(db, 'profiles', favDoc.data().profileId));
+        if (profileDoc.exists()) {
+          const pd = profileDoc.data();
+          favs.push({ favDocId: favDoc.id, profileId: profileDoc.id, name: pd.name, age: pd.age, photos: pd.photos || [], whatsapp: pd.whatsapp, telegram: pd.telegram, contactMethod: pd.contactMethod });
+        }
+      }
+      setFavorites(favs);
       setLoadingProfile(false);
     }
 
@@ -153,6 +166,12 @@ export default function DashboardPage() {
     } catch {
       setMessage('Error al eliminar foto.');
     }
+  };
+
+  const removeFavorite = async (favDocId: string) => {
+    await deleteDoc(doc(db, 'favorites', favDocId));
+    setFavorites(prev => prev.filter(f => f.favDocId !== favDocId));
+    setMessage('Favorito eliminado.');
   };
 
   const toggleDay = (day: number) => {
@@ -245,14 +264,47 @@ export default function DashboardPage() {
         )}
 
         {!profile ? (
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-8 text-center">
-            <p className="text-zinc-400 mb-6">Aún no tienes un perfil publicado en el radar.</p>
-            <Link
-              href="/register"
-              className="inline-block bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 px-8 rounded-xl transition shadow-[0_0_20px_rgba(225,29,72,0.3)]"
-            >
-              Crear mi perfil
-            </Link>
+          <div className="space-y-6">
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-8 text-center">
+              <p className="text-zinc-400 mb-6">Aún no tienes un perfil publicado en el radar.</p>
+              <Link
+                href="/register"
+                className="inline-block bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 px-8 rounded-xl transition shadow-[0_0_20px_rgba(225,29,72,0.3)]"
+              >
+                Crear mi perfil
+              </Link>
+            </div>
+
+            {favorites.length > 0 && (
+              <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                <h3 className="font-bold text-lg">Mis favoritos</h3>
+                <div className="space-y-3">
+                  {favorites.map(f => (
+                    <div key={f.favDocId} className="flex items-center gap-3 bg-zinc-950 rounded-xl p-3 border border-zinc-800/50">
+                      {f.photos.length > 0 ? (
+                        <img src={f.photos[0]} alt="" className="w-12 h-12 rounded-xl object-cover border border-zinc-700 shrink-0" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-600 text-xs shrink-0">Sin foto</div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate">{f.name}, {f.age}</p>
+                        <div className="flex gap-2 mt-1">
+                          {(f.contactMethod === 'whatsapp' || f.contactMethod === 'both' || !f.contactMethod) && f.whatsapp && (
+                            <a href={`https://wa.me/${f.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-xs text-green-400 hover:text-green-300">WhatsApp</a>
+                          )}
+                          {(f.contactMethod === 'telegram' || f.contactMethod === 'both') && f.telegram && (
+                            <a href={`https://t.me/${f.telegram}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300">Telegram</a>
+                          )}
+                        </div>
+                      </div>
+                      <button onClick={() => removeFavorite(f.favDocId)} className="p-2 text-rose-500 hover:text-rose-400 transition shrink-0">
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-6">
@@ -504,6 +556,43 @@ export default function DashboardPage() {
               )}
 
               <p className="text-xs text-zinc-500">{profile.photos.length}/3 fotos</p>
+            </div>
+
+            {/* Favoritos */}
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-4">
+              <h3 className="font-bold text-lg">Mis favoritos</h3>
+              {favorites.length === 0 ? (
+                <p className="text-sm text-zinc-500">No tienes favoritos. Toca el corazón en un perfil del radar para guardarlo.</p>
+              ) : (
+                <div className="space-y-3">
+                  {favorites.map(f => (
+                    <div key={f.favDocId} className="flex items-center gap-3 bg-zinc-950 rounded-xl p-3 border border-zinc-800/50">
+                      {f.photos.length > 0 ? (
+                        <img src={f.photos[0]} alt="" className="w-12 h-12 rounded-xl object-cover border border-zinc-700 shrink-0" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-600 text-xs shrink-0">Sin foto</div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate">{f.name}, {f.age}</p>
+                        <div className="flex gap-2 mt-1">
+                          {(f.contactMethod === 'whatsapp' || f.contactMethod === 'both' || !f.contactMethod) && f.whatsapp && (
+                            <a href={`https://wa.me/${f.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-xs text-green-400 hover:text-green-300">WhatsApp</a>
+                          )}
+                          {(f.contactMethod === 'telegram' || f.contactMethod === 'both') && f.telegram && (
+                            <a href={`https://t.me/${f.telegram}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300">Telegram</a>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeFavorite(f.favDocId)}
+                        className="p-2 text-rose-500 hover:text-rose-400 transition shrink-0"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Zona peligrosa */}
