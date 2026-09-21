@@ -22,6 +22,11 @@ export default function RegisterProfilePage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [rates, setRates] = useState('');
+  const [services, setServices] = useState<string[]>([]);
+  const [contactMethod, setContactMethod] = useState<'whatsapp' | 'telegram' | 'both'>('whatsapp');
+  const [telegram, setTelegram] = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -56,12 +61,6 @@ export default function RegisterProfilePage() {
     );
   };
 
-  const [photos, setPhotos] = useState<File[]>([]);
-  const [rates, setRates] = useState('');
-  const [services, setServices] = useState<string[]>([]);
-  const [contactMethod, setContactMethod] = useState<'whatsapp' | 'telegram' | 'both'>('whatsapp');
-  const [telegram, setTelegram] = useState('');
-  
   const AVAILABLE_SERVICES = ['Masaje', 'Trato de Novios', 'Garganta Profunda', 'Beso con Lengua', 'Lluvia Dorada', 'Juguetes', 'Salidas'];
 
   const handleServiceToggle = (service: string) => {
