@@ -56,6 +56,25 @@ export default function RegisterProfilePage() {
     );
   };
 
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [rates, setRates] = useState('');
+  const [services, setServices] = useState<string[]>([]);
+  
+  const AVAILABLE_SERVICES = ['Masaje', 'Trato de Novios', 'Garganta Profunda', 'Beso con Lengua', 'Lluvia Dorada', 'Juguetes', 'Salidas'];
+
+  const handleServiceToggle = (service: string) => {
+    setServices(prev => 
+      prev.includes(service) ? prev.filter(s => s !== service) : [...prev, service]
+    );
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selected = Array.from(e.target.files).slice(0, 3); // Max 3 photos
+      setPhotos(selected);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!location) {
@@ -69,21 +88,47 @@ export default function RegisterProfilePage() {
 
     setLoading(true);
     try {
-      // Basic sanitization
       const safeName = form.name.substring(0, 30).replace(/[<>]/g, '');
       const safeDescription = form.description.substring(0, 300).replace(/[<>]/g, '');
       const safeWhatsApp = form.whatsapp.replace(/[^0-9+]/g, '').substring(0, 15);
+      const safeRates = rates.substring(0, 200).replace(/[<>]/g, '');
 
-      const hash = geohashForLocation([location.lat, location.lng]);
+      // Ofuscar la ubicación
+      const radiusInMeters = 200;
+      const r = radiusInMeters * Math.sqrt(Math.random());
+      const theta = Math.random() * 2 * Math.PI;
+      const dx = r * Math.cos(theta);
+      const dy = r * Math.sin(theta);
+      const latOffset = dy / 111111;
+      const lngOffset = dx / (111111 * Math.cos(location.lat * Math.PI / 180));
+      const obfuscatedLat = location.lat + latOffset;
+      const obfuscatedLng = location.lng + lngOffset;
+      const hash = geohashForLocation([obfuscatedLat, obfuscatedLng]);
+
+      // Upload photos to Storage
+      const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const { storage } = await import('@/lib/firebase');
+      const photoUrls = [];
+      
+      for (const file of photos) {
+        const fileRef = ref(storage, `profiles/${user?.uid}/${Date.now()}_${file.name}`);
+        const snapshot = await uploadBytes(fileRef, file);
+        const url = await getDownloadURL(snapshot.ref);
+        photoUrls.push(url);
+      }
+
       await addDoc(collection(db, 'profiles'), {
-        uid: user.uid,
+        uid: user?.uid,
         name: safeName,
         age: Number(form.age),
         whatsapp: safeWhatsApp,
         description: safeDescription,
+        rates: safeRates,
+        services: services,
+        photos: photoUrls,
         location: {
-          latitude: location.lat,
-          longitude: location.lng,
+          latitude: obfuscatedLat,
+          longitude: obfuscatedLng,
         },
         geohash: hash,
         active: true,
@@ -178,23 +223,70 @@ export default function RegisterProfilePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-1">¿Qué ofreces? (Descripción)</label>
+                <label className="block text-sm font-semibold text-zinc-300 mb-1">¿Qué ofreces? (Descripción general)</label>
                 <textarea 
-                  rows={3}
+                  rows={2}
                   required
                   value={form.description} 
                   onChange={e => setForm({...form, description: e.target.value})}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500 transition resize-none"
-                  placeholder="Explica qué servicios ofreces, tu disponibilidad, tarifas..."
+                  placeholder="Descripción de ti, tu rollo..."
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-zinc-300 mb-1">Tarifas (Opcional)</label>
+                <textarea 
+                  rows={2}
+                  value={rates} 
+                  onChange={e => setRates(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500 transition resize-none"
+                  placeholder="Ej. 30min - 50€ / 1 hora - 100€"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-zinc-300 mb-2">Servicios que ofreces</label>
+                <div className="flex flex-wrap gap-2">
+                  {AVAILABLE_SERVICES.map(service => (
+                    <button
+                      key={service}
+                      type="button"
+                      onClick={() => handleServiceToggle(service)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
+                        services.includes(service) 
+                          ? 'bg-rose-600 border-rose-500 text-white shadow-[0_0_10px_rgba(225,29,72,0.3)]' 
+                          : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                      }`}
+                    >
+                      {service}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-zinc-300 mb-2">Fotos (Max 3)</label>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoChange}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-rose-600/10 file:text-rose-500 hover:file:bg-rose-600/20 transition"
+                />
+                {photos.length > 0 && (
+                  <p className="text-xs text-zinc-400 mt-2">
+                    Has seleccionado {photos.length} foto(s).
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Sección 2: Geolocalización Estricta */}
+            {/* Sección 2: Geolocalización Estricta y Privada */}
             <div className="bg-zinc-950/50 p-5 rounded-2xl border border-zinc-800/50">
-              <h3 className="text-sm font-bold text-rose-500 uppercase tracking-wider mb-2">2. Tu Ubicación</h3>
+              <h3 className="text-sm font-bold text-rose-500 uppercase tracking-wider mb-2">2. Tu Ubicación (Oculta)</h3>
               <p className="text-sm text-zinc-400 mb-4">
-                El radar necesita saber dónde estás exactamente para poder mostrar tu distancia a los clientes. <strong>Es un requisito obligatorio.</strong>
+                El radar necesita saber dónde estás, pero <strong>por tu seguridad aplicamos un desvío aleatorio de 200 metros</strong>. Los clientes nunca sabrán tu portal exacto, solo la zona.
               </p>
               
               {!location ? (
